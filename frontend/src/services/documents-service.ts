@@ -50,3 +50,14 @@ export async function deleteDocument(documentId: string) {
   });
   return response.data;
 }
+
+
+export async function resetAllAnalysis() {
+  const headers = await getAuthHeader();
+  const response = await axios.post(
+    `${API_URL}/documents/reset-analysis`,
+    {},
+    { headers }
+  );
+  return response.data;
+}

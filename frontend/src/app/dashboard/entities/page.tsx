@@ -1,8 +1,20 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchEntitiesSummary } from "@/services/dashboard-service";
-import { Users, Building2, Calendar, MapPin } from "lucide-react";
+import {
+  fetchEntitiesSummary,
+  deleteEntity,
+} from "@/services/dashboard-service";
+import { resetAllAnalysis } from "@/services/documents-service";
+import { Button } from "@/components/ui/button";
+import {
+  Users,
+  Building2,
+  Calendar,
+  MapPin,
+  X,
+  RotateCcw,
+} from "lucide-react";
 
 interface EntityItem {
   name: string;
@@ -27,9 +39,11 @@ const categoryConfig = {
 function EntityColumn({
   category,
   items,
+  onDelete,
 }: {
   category: keyof typeof categoryConfig;
   items: EntityItem[];
+  onDelete: (category: string, name: string) => void;
 }) {
   const { label, icon: Icon } = categoryConfig[category];
 
@@ -51,18 +65,24 @@ function EntityColumn({
         {items.map((item) => (
           <div
             key={item.name}
-            className="px-4 py-2.5 border-b border-border last:border-0"
+            className="group px-4 py-2.5 border-b border-border last:border-0 flex items-center justify-between"
             title={item.documents.join(", ")}
           >
-            <div className="flex items-center justify-between">
-              <span className="text-sm text-foreground truncate">
-                {item.name}
-              </span>
+            <span className="text-sm text-foreground truncate">
+              {item.name}
+            </span>
+            <div className="flex items-center gap-2 shrink-0">
               {item.count > 1 && (
-                <span className="text-xs text-primary font-mono shrink-0 ml-2 bg-primary/10 px-1.5 py-0.5 rounded">
+                <span className="text-xs text-primary font-mono bg-primary/10 px-1.5 py-0.5 rounded">
                   {item.count}
                 </span>
               )}
+              <button
+                onClick={() => onDelete(category, item.name)}
+                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-danger transition-opacity"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
             </div>
           </div>
         ))}
@@ -74,6 +94,7 @@ function EntityColumn({
 export default function EntitiesPage() {
   const [data, setData] = useState<EntitiesSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [resetting, setResetting] = useState(false);
 
   useEffect(() => {
     let ignore = false;
@@ -94,6 +115,38 @@ export default function EntitiesPage() {
     };
   }, []);
 
+  const handleDeleteEntity = async (category: string, name: string) => {
+    if (!confirm(`Remove "${name}" from all documents?`)) return;
+
+    try {
+      await deleteEntity(category, name);
+      const summary = await fetchEntitiesSummary();
+      setData(summary);
+    } catch (err) {
+      setError("Failed to remove entity");
+    }
+  };
+
+  const handleReset = async () => {
+    if (
+      !confirm(
+        "Clear all extracted entities and summaries? Documents themselves will remain — you can re-analyze them anytime."
+      )
+    )
+      return;
+
+    setResetting(true);
+    try {
+      await resetAllAnalysis();
+      const summary = await fetchEntitiesSummary();
+      setData(summary);
+    } catch (err) {
+      setError("Failed to reset analysis");
+    } finally {
+      setResetting(false);
+    }
+  };
+
   if (!data) {
     return (
       <div className="text-sm text-muted-foreground">
@@ -110,19 +163,53 @@ export default function EntitiesPage() {
 
   return (
     <div>
-      <div className="border-b border-border pb-5">
-        <h1 className="text-xl font-semibold text-foreground">Entities</h1>
-        <p className="text-sm text-muted-foreground mt-1">
-          {totalEntities} unique entities extracted across your analyzed
-          documents
-        </p>
+      <div className="flex items-start justify-between border-b border-border pb-5">
+        <div>
+          <h1 className="text-xl font-semibold text-foreground">Entities</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            {totalEntities} unique entities extracted across your analyzed
+            documents
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          disabled={resetting || totalEntities === 0}
+          onClick={handleReset}
+          className="gap-1.5"
+        >
+          <RotateCcw className="h-3.5 w-3.5" />
+          {resetting ? "Clearing..." : "Clear All"}
+        </Button>
       </div>
 
+      {error && (
+        <p className="text-sm text-danger mt-4 border border-danger/20 rounded-md px-3 py-2">
+          {error}
+        </p>
+      )}
+
       <div className="grid grid-cols-2 gap-4 mt-6">
-        <EntityColumn category="people" items={data.people} />
-        <EntityColumn category="organizations" items={data.organizations} />
-        <EntityColumn category="dates" items={data.dates} />
-        <EntityColumn category="locations" items={data.locations} />
+        <EntityColumn
+          category="people"
+          items={data.people}
+          onDelete={handleDeleteEntity}
+        />
+        <EntityColumn
+          category="organizations"
+          items={data.organizations}
+          onDelete={handleDeleteEntity}
+        />
+        <EntityColumn
+          category="dates"
+          items={data.dates}
+          onDelete={handleDeleteEntity}
+        />
+        <EntityColumn
+          category="locations"
+          items={data.locations}
+          onDelete={handleDeleteEntity}
+        />
       </div>
     </div>
   );

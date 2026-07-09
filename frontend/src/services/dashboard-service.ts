@@ -32,3 +32,13 @@ export async function fetchAlerts() {
   const response = await axios.get(`${API_URL}/alerts`, { headers });
   return response.data;
 }
+
+
+export async function deleteEntity(category: string, entityName: string) {
+  const headers = await getAuthHeader();
+  const response = await axios.delete(
+    `${API_URL}/entities/${category}/${encodeURIComponent(entityName)}`,
+    { headers }
+  );
+  return response.data;
+}

@@ -43,8 +43,22 @@ def get_documents(current_user=Depends(get_current_user)):
 from lib.gemini_client import gemini_client
 from lib.pdf_extractor import extract_text_from_pdf
 
-
 import json
+import time
+
+
+def call_gemini_with_retry(prompt, max_retries=3):
+    for attempt in range(max_retries):
+        try:
+            return gemini_client.models.generate_content(
+                model="gemini-flash-latest",
+                contents=prompt,
+            )
+        except Exception as e:
+            if "503" in str(e) and attempt < max_retries - 1:
+                time.sleep(2 ** attempt)
+                continue
+            raise
 
 
 @app.post("/documents/{document_id}/analyze")
@@ -85,10 +99,7 @@ Document:
 {text[:15000]}
 """
 
-        result = gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-        )
+        result = call_gemini_with_retry(prompt)
 
         raw_response = result.text.strip()
         raw_response = raw_response.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
@@ -318,10 +329,7 @@ Document summaries:
 {combined_summaries}
 """
 
-        result = gemini_client.models.generate_content(
-            model="gemini-2.5-flash",
-            contents=prompt,
-        )
+        result = call_gemini_with_retry(prompt)
 
         raw_response = result.text.strip()
         raw_response = raw_response.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
@@ -512,6 +520,63 @@ def get_alerts(current_user=Depends(get_current_user)):
         all_alerts.sort(key=lambda a: a["created_at"], reverse=True)
 
         return all_alerts
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/documents/reset-analysis")
+def reset_all_analysis(current_user=Depends(get_current_user)):
+    try:
+        response = (
+            supabase.table("documents")
+            .update({"summary": None, "entities": None, "status": "uploaded"})
+            .eq("user_id", current_user.id)
+            .eq("status", "analyzed")
+            .execute()
+        )
+        return {"reset_count": len(response.data)}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+VALID_ENTITY_CATEGORIES = {"people", "organizations", "dates", "locations"}
+
+
+@app.delete("/entities/{category}/{entity_name}")
+def delete_entity(
+    category: str, entity_name: str, current_user=Depends(get_current_user)
+):
+    if category not in VALID_ENTITY_CATEGORIES:
+        raise HTTPException(status_code=400, detail="Invalid entity category")
+
+    try:
+        documents_response = (
+            supabase.table("documents")
+            .select("id, entities")
+            .eq("user_id", current_user.id)
+            .eq("status", "analyzed")
+            .execute()
+        )
+
+        removed_from = 0
+
+        for doc in documents_response.data:
+            entities = doc.get("entities")
+            if not entities:
+                continue
+
+            category_list = entities.get(category, [])
+            if entity_name in category_list:
+                entities[category] = [
+                    name for name in category_list if name != entity_name
+                ]
+                supabase.table("documents").update({"entities": entities}).eq(
+                    "id", doc["id"]
+                ).execute()
+                removed_from += 1
+
+        return {"removed_from": removed_from}
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

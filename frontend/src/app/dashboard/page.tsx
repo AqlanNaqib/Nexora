@@ -1,15 +1,11 @@
 "use client";
 
+import { supabase } from "@/lib/supabase";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { fetchDashboardSummary } from "@/services/dashboard-service";
 import { Card, CardContent } from "@/components/ui/card";
-import {
-  FileText,
-  FolderSearch,
-  CheckCircle2,
-  Clock,
-} from "lucide-react";
+import { FileText, FolderSearch, CheckCircle2, Clock } from "lucide-react";
 import {
   ResponsiveContainer,
   AreaChart,
@@ -54,6 +50,13 @@ interface DashboardSummary {
   recent_investigations: RecentInvestigation[];
 }
 
+function getGreeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return "Good morning";
+  if (hour < 18) return "Good afternoon";
+  return "Good evening";
+}
+
 function StatCard({
   label,
   value,
@@ -80,8 +83,8 @@ function StatCard({
               accent === "primary"
                 ? "bg-primary/10"
                 : accent === "success"
-                ? "bg-success/10"
-                : "bg-muted/30"
+                  ? "bg-success/10"
+                  : "bg-muted/30"
             }`}
           >
             <Icon
@@ -89,8 +92,8 @@ function StatCard({
                 accent === "primary"
                   ? "text-primary"
                   : accent === "success"
-                  ? "text-success"
-                  : "text-muted-foreground"
+                    ? "text-success"
+                    : "text-muted-foreground"
               }`}
             />
           </div>
@@ -103,11 +106,12 @@ function StatCard({
 export default function DashboardPage() {
   const [data, setData] = useState<DashboardSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [displayName, setDisplayName] = useState("");
 
   useEffect(() => {
     let ignore = false;
 
-    async function load() {
+    async function loadDashboard() {
       try {
         const summary = await fetchDashboardSummary();
         if (!ignore) setData(summary);
@@ -116,7 +120,16 @@ export default function DashboardPage() {
       }
     }
 
-    load();
+    loadDashboard();
+
+    supabase.auth.getUser().then(({ data: userData }) => {
+      if (!ignore && userData.user) {
+        const meta = userData.user.user_metadata || {};
+        setDisplayName(
+          meta.display_name || userData.user.email?.split("@")[0] || ""
+        );
+      }
+    });
 
     return () => {
       ignore = true;
@@ -134,7 +147,10 @@ export default function DashboardPage() {
   return (
     <div>
       <div className="border-b border-border pb-5">
-        <h1 className="text-xl font-semibold text-foreground">Dashboard</h1>
+        <h1 className="text-xl font-semibold text-foreground">
+          {getGreeting()}
+          {displayName && `, ${displayName}`}
+        </h1>
         <p className="text-sm text-muted-foreground mt-1">
           Overview of your investigation workspace
         </p>
@@ -178,12 +194,28 @@ export default function DashboardPage() {
             <AreaChart data={data.activity_timeline}>
               <defs>
                 <linearGradient id="uploadedFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--color-muted-foreground)" stopOpacity={0.25} />
-                  <stop offset="100%" stopColor="var(--color-muted-foreground)" stopOpacity={0} />
+                  <stop
+                    offset="0%"
+                    stopColor="var(--color-muted-foreground)"
+                    stopOpacity={0.25}
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor="var(--color-muted-foreground)"
+                    stopOpacity={0}
+                  />
                 </linearGradient>
                 <linearGradient id="analyzedFill" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="var(--color-primary)" stopOpacity={0.4} />
-                  <stop offset="100%" stopColor="var(--color-primary)" stopOpacity={0} />
+                  <stop
+                    offset="0%"
+                    stopColor="var(--color-primary)"
+                    stopOpacity={0.4}
+                  />
+                  <stop
+                    offset="100%"
+                    stopColor="var(--color-primary)"
+                    stopOpacity={0}
+                  />
                 </linearGradient>
               </defs>
               <CartesianGrid

@@ -40,3 +40,14 @@ export async function deleteInvestigation(id: string) {
   });
   return response.data;
 }
+
+
+export async function synthesizeInvestigation(id: string) {
+  const headers = await getAuthHeader();
+  const response = await axios.post(
+    `${API_URL}/investigations/${id}/synthesize`,
+    {},
+    { headers }
+  );
+  return response.data;
+}

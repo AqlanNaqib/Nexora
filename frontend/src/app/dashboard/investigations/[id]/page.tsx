@@ -1,10 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import {
   fetchInvestigation,
   deleteInvestigation,
+  synthesizeInvestigation,
 } from "@/services/investigations-service";
 import { uploadDocument, analyzeDocument } from "@/services/documents-service";
 import { Button } from "@/components/ui/button";
@@ -16,8 +17,8 @@ import {
   ChevronRight,
   FileUp,
   Trash2,
+  Layers,
 } from "lucide-react";
-import { useRouter } from "next/navigation";
 
 interface Document {
   id: string;
@@ -33,6 +34,7 @@ interface Investigation {
   description: string | null;
   status: string;
   created_at: string;
+  synthesis?: string | null;
   documents: Document[];
 }
 
@@ -60,6 +62,7 @@ export default function InvestigationDetailPage() {
   );
   const [uploading, setUploading] = useState(false);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
+  const [synthesizing, setSynthesizing] = useState(false);
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
@@ -114,6 +117,21 @@ export default function InvestigationDetailPage() {
     }
   };
 
+  const handleSynthesize = async () => {
+    setSynthesizing(true);
+    setError(null);
+    try {
+      const updated = await synthesizeInvestigation(investigationId);
+      setInvestigation((prev) =>
+        prev ? { ...prev, synthesis: updated.synthesis } : prev
+      );
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Synthesis failed");
+    } finally {
+      setSynthesizing(false);
+    }
+  };
+
   const handleDeleteInvestigation = async () => {
     if (
       !confirm(
@@ -150,6 +168,10 @@ export default function InvestigationDetailPage() {
     );
   }
 
+  const analyzedCount = investigation.documents.filter(
+    (d) => d.status === "analyzed"
+  ).length;
+
   return (
     <div>
       <div className="flex items-start justify-between border-b border-border pb-5">
@@ -164,7 +186,8 @@ export default function InvestigationDetailPage() {
           )}
           <p className="text-xs text-muted-foreground mt-2 font-mono">
             {investigation.documents.length} document
-            {investigation.documents.length !== 1 && "s"}
+            {investigation.documents.length !== 1 && "s"} · {analyzedCount}{" "}
+            analyzed
           </p>
         </div>
 
@@ -184,6 +207,21 @@ export default function InvestigationDetailPage() {
             onChange={handleFileChange}
             disabled={uploading}
           />
+          <Button
+            size="sm"
+            variant="outline"
+            disabled={synthesizing || analyzedCount < 2}
+            onClick={handleSynthesize}
+            className="gap-1.5"
+            title={
+              analyzedCount < 2
+                ? "Requires at least 2 analyzed documents"
+                : undefined
+            }
+          >
+            <Layers className="h-3.5 w-3.5" />
+            {synthesizing ? "Synthesizing..." : "Synthesize Case"}
+          </Button>
           <Button size="sm" variant="ghost" onClick={handleDeleteInvestigation}>
             <Trash2 className="h-3.5 w-3.5 text-danger" />
           </Button>
@@ -194,6 +232,17 @@ export default function InvestigationDetailPage() {
         <p className="text-sm text-danger mt-4 border border-danger/20 rounded-md px-3 py-2">
           {error}
         </p>
+      )}
+
+      {investigation.synthesis && (
+        <div className="mt-6 bg-surface border border-border rounded-md px-5 py-4">
+          <p className="text-xs font-medium text-primary uppercase tracking-wide mb-3">
+            Case Synthesis
+          </p>
+          <p className="text-sm text-foreground/90 whitespace-pre-line leading-relaxed">
+            {investigation.synthesis}
+          </p>
+        </div>
       )}
 
       <div className="mt-4">

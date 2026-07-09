@@ -242,3 +242,75 @@ async def upload_document(
         return response.data[0]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/investigations/{investigation_id}/synthesize")
+def synthesize_investigation(
+    investigation_id: str, current_user=Depends(get_current_user)
+):
+    try:
+        inv_response = (
+            supabase.table("investigations")
+            .select("*")
+            .eq("id", investigation_id)
+            .eq("user_id", current_user.id)
+            .execute()
+        )
+
+        if not inv_response.data:
+            raise HTTPException(status_code=404, detail="Investigation not found")
+
+        docs_response = (
+            supabase.table("documents")
+            .select("*")
+            .eq("investigation_id", investigation_id)
+            .eq("status", "analyzed")
+            .execute()
+        )
+
+        documents = docs_response.data
+
+        if len(documents) < 2:
+            raise HTTPException(
+                status_code=422,
+                detail="At least 2 analyzed documents are required for synthesis",
+            )
+
+        combined_summaries = "\n\n---\n\n".join(
+            f"Document: {doc['filename']}\n{doc['summary']}" for doc in documents
+        )
+
+        prompt = f"""You are analyzing multiple documents from a single investigation case.
+Below are individual summaries of each document. Your task is to synthesize
+them into a case-level analysis.
+
+Provide:
+1. A combined overview (3-4 sentences) of what this case is about, drawing connections across documents
+2. Entities that appear across MULTIPLE documents (people, organizations, dates, locations) — note which documents they appear in
+3. Any contradictions, inconsistencies, or notable discrepancies between documents
+4. A combined chronological timeline of key dates/events across all documents
+
+Document summaries:
+{combined_summaries}
+"""
+
+        result = gemini_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+        )
+
+        synthesis = result.text
+
+        update_response = (
+            supabase.table("investigations")
+            .update({"synthesis": synthesis})
+            .eq("id", investigation_id)
+            .execute()
+        )
+
+        return update_response.data[0]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

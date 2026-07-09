@@ -303,14 +303,16 @@ def synthesize_investigation(
         )
 
         prompt = f"""You are analyzing multiple documents from a single investigation case.
-Below are individual summaries of each document. Your task is to synthesize
-them into a case-level analysis.
+Respond with ONLY valid JSON, no markdown formatting, no code fences, matching exactly this structure:
 
-Provide:
-1. A combined overview (3-4 sentences) of what this case is about, drawing connections across documents
-2. Entities that appear across MULTIPLE documents (people, organizations, dates, locations) — note which documents they appear in
-3. Any contradictions, inconsistencies, or notable discrepancies between documents
-4. A combined chronological timeline of key dates/events across all documents
+{{
+  "overview": "3-4 sentence combined overview drawing connections across documents",
+  "shared_entities": "text describing entities appearing across multiple documents and which documents",
+  "timeline": "text describing a combined chronological timeline of key dates/events",
+  "contradictions": ["short description of contradiction 1", "short description of contradiction 2"]
+}}
+
+If there are no contradictions, return an empty array for "contradictions".
 
 Document summaries:
 {combined_summaries}
@@ -321,7 +323,15 @@ Document summaries:
             contents=prompt,
         )
 
-        synthesis = result.text
+        raw_response = result.text.strip()
+        raw_response = raw_response.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+        parsed = json.loads(raw_response)
+
+        synthesis = (
+            f"**Overview**\n{parsed['overview']}\n\n"
+            f"**Shared Entities**\n{parsed['shared_entities']}\n\n"
+            f"**Timeline**\n{parsed['timeline']}"
+        )
 
         update_response = (
             supabase.table("investigations")
@@ -330,10 +340,24 @@ Document summaries:
             .execute()
         )
 
+        supabase.table("alerts").delete().eq("investigation_id", investigation_id).eq("type", "contradiction").execute()
+
+        for contradiction in parsed.get("contradictions", []):
+            supabase.table("alerts").insert({
+                "user_id": current_user.id,
+                "investigation_id": investigation_id,
+                "type": "contradiction",
+                "message": contradiction,
+            }).execute()
+
         return update_response.data[0]
 
     except HTTPException:
         raise
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=500, detail="AI response could not be parsed as valid JSON"
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     
@@ -446,6 +470,48 @@ def get_entities_summary(current_user=Depends(get_current_user)):
             )
 
         return result
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/alerts")
+def get_alerts(current_user=Depends(get_current_user)):
+    try:
+        stored_alerts_response = (
+            supabase.table("alerts")
+            .select("*, investigations(title)")
+            .eq("user_id", current_user.id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        stored_alerts = stored_alerts_response.data
+
+        stale_cutoff = datetime.now(timezone.utc) - timedelta(days=3)
+        documents_response = (
+            supabase.table("documents")
+            .select("*")
+            .eq("user_id", current_user.id)
+            .eq("status", "uploaded")
+            .execute()
+        )
+
+        stale_alerts = []
+        for doc in documents_response.data:
+            created = datetime.fromisoformat(doc["created_at"])
+            if created < stale_cutoff:
+                stale_alerts.append({
+                    "id": f"stale-{doc['id']}",
+                    "type": "stale_document",
+                    "message": f'"{doc["filename"]}" has been uploaded but not analyzed',
+                    "created_at": doc["created_at"],
+                    "investigations": None,
+                })
+
+        all_alerts = stored_alerts + stale_alerts
+        all_alerts.sort(key=lambda a: a["created_at"], reverse=True)
+
+        return all_alerts
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

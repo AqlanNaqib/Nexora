@@ -25,3 +25,10 @@ export async function fetchEntitiesSummary() {
   });
   return response.data;
 }
+
+
+export async function fetchAlerts() {
+  const headers = await getAuthHeader();
+  const response = await axios.get(`${API_URL}/alerts`, { headers });
+  return response.data;
+}

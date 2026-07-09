@@ -66,3 +66,58 @@ def get_documents(current_user=Depends(get_current_user)):
         return response.data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+from lib.gemini_client import gemini_client
+from lib.pdf_extractor import extract_text_from_pdf
+
+
+@app.post("/documents/{document_id}/analyze")
+def analyze_document(document_id: str, current_user=Depends(get_current_user)):
+    try:
+        doc_response = (
+            supabase.table("documents")
+            .select("*")
+            .eq("id", document_id)
+            .eq("user_id", current_user.id)
+            .execute()
+        )
+
+        if not doc_response.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        document = doc_response.data[0]
+
+        file_bytes = supabase.storage.from_("documents").download(document["storage_path"])
+        text = extract_text_from_pdf(file_bytes)
+
+        if not text.strip():
+            raise HTTPException(status_code=422, detail="No readable text found in document")
+
+        prompt = f"""Summarize the following document in 3-4 sentences,
+then list the key entities mentioned (people, organizations, dates, locations).
+
+Document:
+{text[:15000]}
+"""
+
+        result = gemini_client.models.generate_content(
+            model="gemini-2.5-flash",
+            contents=prompt,
+        )
+
+        summary = result.text
+
+        update_response = (
+            supabase.table("documents")
+            .update({"summary": summary, "status": "analyzed"})
+            .eq("id", document_id)
+            .execute()
+        )
+
+        return update_response.data[0]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

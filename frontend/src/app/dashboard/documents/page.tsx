@@ -1,7 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { uploadDocument, fetchDocuments } from "@/services/documents-service";
+import {
+  uploadDocument,
+  fetchDocuments,
+  analyzeDocument,
+} from "@/services/documents-service";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 
@@ -11,11 +15,13 @@ interface Document {
   file_type: string;
   status: string;
   created_at: string;
+  summary?: string | null;
 }
 
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -54,6 +60,20 @@ export default function DocumentsPage() {
     }
   };
 
+  const handleAnalyze = async (documentId: string) => {
+    setAnalyzingId(documentId);
+    setError(null);
+    try {
+      const updated = await analyzeDocument(documentId);
+      setDocuments((prev) =>
+        prev.map((doc) => (doc.id === documentId ? updated : doc))
+      );
+    } catch (err) {
+      setError("Analysis failed");
+    } finally {
+      setAnalyzingId(null);
+    }
+  };
 
   return (
     <div>
@@ -87,16 +107,40 @@ export default function DocumentsPage() {
         )}
         {documents.map((doc) => (
           <Card key={doc.id}>
-            <CardContent className="py-4 flex items-center justify-between">
-              <div>
-                <p className="font-medium text-foreground">{doc.filename}</p>
-                <p className="text-sm text-muted-foreground">
-                  {doc.file_type} · {doc.status}
-                </p>
+            <CardContent className="py-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="font-medium text-foreground">
+                    {doc.filename}
+                  </p>
+                  <p className="text-sm text-muted-foreground">
+                    {doc.file_type} · {doc.status}
+                  </p>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs text-muted-foreground">
+                    {new Date(doc.created_at).toLocaleDateString()}
+                  </span>
+                  {doc.status !== "analyzed" && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      disabled={analyzingId === doc.id}
+                      onClick={() => handleAnalyze(doc.id)}
+                    >
+                      {analyzingId === doc.id ? "Analyzing..." : "Analyze"}
+                    </Button>
+                  )}
+                </div>
               </div>
-              <span className="text-xs text-muted-foreground">
-                {new Date(doc.created_at).toLocaleDateString()}
-              </span>
+
+              {doc.summary && (
+                <div className="mt-4 pt-4 border-t border-border">
+                  <p className="text-sm text-muted-foreground whitespace-pre-line">
+                    {doc.summary}
+                  </p>
+                </div>
+              )}
             </CardContent>
           </Card>
         ))}

@@ -29,3 +29,13 @@ export async function fetchDocuments() {
   const response = await axios.get(`${API_URL}/documents`, { headers });
   return response.data;
 }
+
+export async function analyzeDocument(documentId: string) {
+  const headers = await getAuthHeader();
+  const response = await axios.post(
+    `${API_URL}/documents/${documentId}/analyze`,
+    {},
+    { headers }
+  );
+  return response.data;
+}

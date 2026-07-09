@@ -58,7 +58,7 @@ export default function InvestigationDetailPage() {
   const investigationId = params.id as string;
 
   const [investigation, setInvestigation] = useState<Investigation | null>(
-    null
+    null,
   );
   const [uploading, setUploading] = useState(false);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
@@ -123,7 +123,7 @@ export default function InvestigationDetailPage() {
     try {
       const updated = await synthesizeInvestigation(investigationId);
       setInvestigation((prev) =>
-        prev ? { ...prev, synthesis: updated.synthesis } : prev
+        prev ? { ...prev, synthesis: updated.synthesis } : prev,
       );
     } catch (err: any) {
       setError(err?.response?.data?.detail || "Synthesis failed");
@@ -135,7 +135,7 @@ export default function InvestigationDetailPage() {
   const handleDeleteInvestigation = async () => {
     if (
       !confirm(
-        "Delete this investigation? Documents will remain but become unassigned."
+        "Delete this investigation? Documents will remain but become unassigned.",
       )
     )
       return;
@@ -169,7 +169,7 @@ export default function InvestigationDetailPage() {
   }
 
   const analyzedCount = investigation.documents.filter(
-    (d) => d.status === "analyzed"
+    (d) => d.status === "analyzed",
   ).length;
 
   return (
@@ -291,19 +291,21 @@ export default function InvestigationDetailPage() {
 
                   <div className="flex items-center gap-4 shrink-0">
                     <StatusDot status={doc.status} />
-                    {doc.status !== "analyzed" && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={analyzingId === doc.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAnalyze(doc.id);
-                        }}
-                      >
-                        {analyzingId === doc.id ? "Analyzing..." : "Analyze"}
-                      </Button>
-                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={analyzingId === doc.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAnalyze(doc.id);
+                      }}
+                    >
+                      {analyzingId === doc.id
+                        ? "Analyzing..."
+                        : doc.status === "analyzed"
+                          ? "Re-analyze"
+                          : "Analyze"}
+                    </Button>
                   </div>
                 </div>
 

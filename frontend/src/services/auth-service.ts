@@ -29,3 +29,16 @@ export async function getSession() {
   const { data } = await supabase.auth.getSession();
   return data.session;
 }
+
+
+export async function updateProfile(displayName: string, avatarColor: string) {
+  const { data, error } = await supabase.auth.updateUser({
+    data: {
+      display_name: displayName,
+      avatar_color: avatarColor,
+    },
+  });
+
+  if (error) throw new Error(error.message);
+  return data;
+}

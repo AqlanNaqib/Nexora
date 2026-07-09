@@ -91,7 +91,7 @@ export default function DocumentsPage() {
     try {
       const updated = await analyzeDocument(documentId);
       setDocuments((prev) =>
-        prev.map((doc) => (doc.id === documentId ? updated : doc))
+        prev.map((doc) => (doc.id === documentId ? updated : doc)),
       );
       setExpandedIds((prev) => new Set(prev).add(documentId));
     } catch (err) {
@@ -208,30 +208,35 @@ export default function DocumentsPage() {
                         {doc.filename}
                       </p>
                       <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                        {new Date(doc.created_at).toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
+                        {new Date(doc.created_at).toLocaleDateString(
+                          undefined,
+                          {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          },
+                        )}
                       </p>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-4 shrink-0">
                     <StatusDot status={doc.status} />
-                    {doc.status !== "analyzed" && (
-                      <Button
-                        size="sm"
-                        variant="outline"
-                        disabled={analyzingId === doc.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleAnalyze(doc.id);
-                        }}
-                      >
-                        {analyzingId === doc.id ? "Analyzing..." : "Analyze"}
-                      </Button>
-                    )}
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={analyzingId === doc.id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleAnalyze(doc.id);
+                      }}
+                    >
+                      {analyzingId === doc.id
+                        ? "Analyzing..."
+                        : doc.status === "analyzed"
+                          ? "Re-analyze"
+                          : "Analyze"}
+                    </Button>
                     <Button
                       size="sm"
                       variant="ghost"

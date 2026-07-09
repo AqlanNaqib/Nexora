@@ -9,10 +9,13 @@ async function getAuthHeader() {
   return { Authorization: `Bearer ${token}` };
 }
 
-export async function uploadDocument(file: File) {
+export async function uploadDocument(file: File, investigationId?: string) {
   const headers = await getAuthHeader();
   const formData = new FormData();
   formData.append("file", file);
+  if (investigationId) {
+    formData.append("investigation_id", investigationId);
+  }
 
   const response = await axios.post(`${API_URL}/documents/upload`, formData, {
     headers: {
@@ -35,11 +38,10 @@ export async function analyzeDocument(documentId: string) {
   const response = await axios.post(
     `${API_URL}/documents/${documentId}/analyze`,
     {},
-    { headers }
+    { headers },
   );
   return response.data;
 }
-
 
 export async function deleteDocument(documentId: string) {
   const headers = await getAuthHeader();
@@ -48,6 +50,3 @@ export async function deleteDocument(documentId: string) {
   });
   return response.data;
 }
-
-
-

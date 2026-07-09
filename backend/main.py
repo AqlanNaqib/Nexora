@@ -1,6 +1,5 @@
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends
 from lib.supabase_client import supabase
-from models import DocumentCreate
 from dependencies import get_current_user
 
 app = FastAPI()
@@ -25,33 +24,6 @@ def read_root():
 def health_check():
     return {"status": "ok"}
 
-
-@app.post("/documents/upload")
-async def upload_document(
-    file: UploadFile = File(...),
-    current_user=Depends(get_current_user),
-):
-    try:
-        user_id = current_user.id
-        file_bytes = await file.read()
-        storage_path = f"{user_id}/{file.filename}"
-
-        supabase.storage.from_("documents").upload(
-            path=storage_path,
-            file=file_bytes,
-            file_options={"content-type": file.content_type},
-        )
-
-        response = supabase.table("documents").insert({
-            "user_id": user_id,
-            "filename": file.filename,
-            "file_type": file.content_type,
-            "storage_path": storage_path,
-        }).execute()
-
-        return response.data[0]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/documents")
@@ -146,5 +118,127 @@ def delete_document(document_id: str, current_user=Depends(get_current_user)):
 
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+from models import DocumentCreate, InvestigationCreate
+
+
+@app.post("/investigations")
+def create_investigation(
+    investigation: InvestigationCreate,
+    current_user=Depends(get_current_user),
+):
+    try:
+        response = supabase.table("investigations").insert({
+            "user_id": current_user.id,
+            "title": investigation.title,
+            "description": investigation.description,
+        }).execute()
+        return response.data[0]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/investigations")
+def get_investigations(current_user=Depends(get_current_user)):
+    try:
+        response = (
+            supabase.table("investigations")
+            .select("*")
+            .eq("user_id", current_user.id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        return response.data
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/investigations/{investigation_id}")
+def get_investigation(investigation_id: str, current_user=Depends(get_current_user)):
+    try:
+        inv_response = (
+            supabase.table("investigations")
+            .select("*")
+            .eq("id", investigation_id)
+            .eq("user_id", current_user.id)
+            .execute()
+        )
+
+        if not inv_response.data:
+            raise HTTPException(status_code=404, detail="Investigation not found")
+
+        docs_response = (
+            supabase.table("documents")
+            .select("*")
+            .eq("investigation_id", investigation_id)
+            .execute()
+        )
+
+        investigation = inv_response.data[0]
+        investigation["documents"] = docs_response.data
+        return investigation
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/investigations/{investigation_id}")
+def delete_investigation(investigation_id: str, current_user=Depends(get_current_user)):
+    try:
+        inv_response = (
+            supabase.table("investigations")
+            .select("*")
+            .eq("id", investigation_id)
+            .eq("user_id", current_user.id)
+            .execute()
+        )
+
+        if not inv_response.data:
+            raise HTTPException(status_code=404, detail="Investigation not found")
+
+        supabase.table("investigations").delete().eq("id", investigation_id).execute()
+
+        return {"status": "deleted", "id": investigation_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+@app.post("/documents/upload")
+async def upload_document(
+    file: UploadFile = File(...),
+    investigation_id: str | None = Form(None),
+    current_user=Depends(get_current_user),
+):
+    try:
+        user_id = current_user.id
+        file_bytes = await file.read()
+        storage_path = f"{user_id}/{file.filename}"
+
+        supabase.storage.from_("documents").upload(
+            path=storage_path,
+            file=file_bytes,
+            file_options={"content-type": file.content_type},
+        )
+
+        insert_data = {
+            "user_id": user_id,
+            "filename": file.filename,
+            "file_type": file.content_type,
+            "storage_path": storage_path,
+        }
+
+        if investigation_id:
+            insert_data["investigation_id"] = investigation_id
+
+        response = supabase.table("documents").insert(insert_data).execute()
+
+        return response.data[0]
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

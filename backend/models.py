@@ -6,3 +6,8 @@ class DocumentCreate(BaseModel):
     filename: str
     file_type: str
     storage_path: str
+
+
+class InvestigationCreate(BaseModel):
+    title: str
+    description: str | None = None

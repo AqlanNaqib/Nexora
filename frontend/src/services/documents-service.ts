@@ -39,3 +39,15 @@ export async function analyzeDocument(documentId: string) {
   );
   return response.data;
 }
+
+
+export async function deleteDocument(documentId: string) {
+  const headers = await getAuthHeader();
+  const response = await axios.delete(`${API_URL}/documents/${documentId}`, {
+    headers,
+  });
+  return response.data;
+}
+
+
+

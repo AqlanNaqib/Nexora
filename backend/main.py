@@ -121,3 +121,30 @@ Document:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.delete("/documents/{document_id}")
+def delete_document(document_id: str, current_user=Depends(get_current_user)):
+    try:
+        doc_response = (
+            supabase.table("documents")
+            .select("*")
+            .eq("id", document_id)
+            .eq("user_id", current_user.id)
+            .execute()
+        )
+
+        if not doc_response.data:
+            raise HTTPException(status_code=404, detail="Document not found")
+
+        document = doc_response.data[0]
+
+        supabase.storage.from_("documents").remove([document["storage_path"]])
+
+        supabase.table("documents").delete().eq("id", document_id).execute()
+
+        return {"status": "deleted", "id": document_id}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

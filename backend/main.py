@@ -44,6 +44,9 @@ from lib.gemini_client import gemini_client
 from lib.pdf_extractor import extract_text_from_pdf
 
 
+import json
+
+
 @app.post("/documents/{document_id}/analyze")
 def analyze_document(document_id: str, current_user=Depends(get_current_user)):
     try:
@@ -66,8 +69,17 @@ def analyze_document(document_id: str, current_user=Depends(get_current_user)):
         if not text.strip():
             raise HTTPException(status_code=422, detail="No readable text found in document")
 
-        prompt = f"""Summarize the following document in 3-4 sentences,
-then list the key entities mentioned (people, organizations, dates, locations).
+        prompt = f"""Analyze the following document. Respond with ONLY valid JSON, no markdown formatting, no code fences, matching exactly this structure:
+
+{{
+  "summary": "3-4 sentence summary of the document",
+  "entities": {{
+    "people": ["name1", "name2"],
+    "organizations": ["org1", "org2"],
+    "dates": ["date1", "date2"],
+    "locations": ["location1", "location2"]
+  }}
+}}
 
 Document:
 {text[:15000]}
@@ -78,11 +90,16 @@ Document:
             contents=prompt,
         )
 
-        summary = result.text
+        raw_response = result.text.strip()
+        raw_response = raw_response.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+
+        parsed = json.loads(raw_response)
+        summary = parsed["summary"]
+        entities = parsed["entities"]
 
         update_response = (
             supabase.table("documents")
-            .update({"summary": summary, "status": "analyzed"})
+            .update({"summary": summary, "entities": entities, "status": "analyzed"})
             .eq("id", document_id)
             .execute()
         )
@@ -91,6 +108,11 @@ Document:
 
     except HTTPException:
         raise
+    except json.JSONDecodeError:
+        raise HTTPException(
+            status_code=500,
+            detail="AI response could not be parsed as valid JSON",
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -312,5 +334,118 @@ Document summaries:
 
     except HTTPException:
         raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+from datetime import datetime, timedelta, timezone
+
+
+@app.get("/dashboard/summary")
+def get_dashboard_summary(current_user=Depends(get_current_user)):
+    try:
+        investigations_response = (
+            supabase.table("investigations")
+            .select("*")
+            .eq("user_id", current_user.id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        investigations = investigations_response.data
+
+        documents_response = (
+            supabase.table("documents")
+            .select("*")
+            .eq("user_id", current_user.id)
+            .order("created_at", desc=True)
+            .execute()
+        )
+        documents = documents_response.data
+
+        analyzed_count = len([d for d in documents if d["status"] == "analyzed"])
+        pending_count = len(documents) - analyzed_count
+
+        thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
+        activity_by_day: dict[str, dict[str, int]] = {}
+
+        for doc in documents:
+            created = datetime.fromisoformat(doc["created_at"])
+            if created < thirty_days_ago:
+                continue
+            day_key = created.strftime("%Y-%m-%d")
+            if day_key not in activity_by_day:
+                activity_by_day[day_key] = {"uploaded": 0, "analyzed": 0}
+            activity_by_day[day_key]["uploaded"] += 1
+            if doc["status"] == "analyzed":
+                activity_by_day[day_key]["analyzed"] += 1
+
+        activity_timeline = [
+            {"date": day, **counts}
+            for day, counts in sorted(activity_by_day.items())
+        ]
+
+        recent_documents = documents[:5]
+        recent_investigations = investigations[:5]
+
+        return {
+            "stats": {
+                "total_investigations": len(investigations),
+                "total_documents": len(documents),
+                "analyzed_documents": analyzed_count,
+                "pending_documents": pending_count,
+            },
+            "activity_timeline": activity_timeline,
+            "recent_documents": recent_documents,
+            "recent_investigations": recent_investigations,
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    
+
+@app.get("/entities/summary")
+def get_entities_summary(current_user=Depends(get_current_user)):
+    try:
+        documents_response = (
+            supabase.table("documents")
+            .select("id, filename, entities")
+            .eq("user_id", current_user.id)
+            .eq("status", "analyzed")
+            .execute()
+        )
+
+        documents = documents_response.data
+
+        entity_counts: dict[str, dict[str, list[str]]] = {
+            "people": {},
+            "organizations": {},
+            "dates": {},
+            "locations": {},
+        }
+
+        for doc in documents:
+            entities = doc.get("entities")
+            if not entities:
+                continue
+
+            for category in entity_counts:
+                for name in entities.get(category, []):
+                    if name not in entity_counts[category]:
+                        entity_counts[category][name] = []
+                    entity_counts[category][name].append(doc["filename"])
+
+        result = {}
+        for category, names in entity_counts.items():
+            result[category] = sorted(
+                [
+                    {"name": name, "count": len(files), "documents": files}
+                    for name, files in names.items()
+                ],
+                key=lambda x: x["count"],
+                reverse=True,
+            )
+
+        return result
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

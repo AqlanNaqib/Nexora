@@ -8,6 +8,7 @@ import {
   FolderOpen,
   Settings,
   ShieldAlert,
+  Users,
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
@@ -16,6 +17,7 @@ const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
   { label: "Investigations", href: "/dashboard/investigations", icon: FileSearch },
   { label: "Documents", href: "/dashboard/documents", icon: FolderOpen },
+  { label: "Entities", href: "/dashboard/entities", icon: Users },
   { label: "Alerts", href: "/dashboard/alerts", icon: ShieldAlert },
 ];
 

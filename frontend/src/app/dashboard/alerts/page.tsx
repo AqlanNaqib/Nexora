@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { fetchAlerts } from "@/services/dashboard-service";
-import { AlertTriangle, Clock, ShieldAlert } from "lucide-react";
+import { fetchAlerts, deleteAlert } from "@/services/dashboard-service";
+import { AlertTriangle, Clock, ShieldAlert, X } from "lucide-react";
 
 interface Alert {
   id: string;
@@ -27,10 +27,10 @@ const alertConfig: Record<string, { icon: React.ElementType; color: string; labe
   },
 };
 
-
 export default function AlertsPage() {
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [dismissingId, setDismissingId] = useState<string | null>(null);
 
   useEffect(() => {
     let ignore = false;
@@ -50,6 +50,24 @@ export default function AlertsPage() {
       ignore = true;
     };
   }, []);
+
+  const handleDismiss = async (
+    e: React.MouseEvent,
+    alertId: string
+  ) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    setDismissingId(alertId);
+    try {
+      await deleteAlert(alertId);
+      setAlerts((prev) => prev.filter((a) => a.id !== alertId));
+    } catch (err) {
+      setError("Failed to dismiss alert");
+    } finally {
+      setDismissingId(null);
+    }
+  };
 
   return (
     <div>
@@ -84,7 +102,7 @@ export default function AlertsPage() {
           const Icon = config.icon;
 
           const content = (
-            <div className="flex items-start gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-surface-hover transition-colors">
+            <div className="group flex items-start gap-3 px-4 py-3 border-b border-border last:border-0 hover:bg-surface-hover transition-colors">
               <Icon className={`h-4 w-4 mt-0.5 shrink-0 ${config.color}`} />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2">
@@ -97,9 +115,7 @@ export default function AlertsPage() {
                     </span>
                   )}
                 </div>
-                <p className="text-sm text-foreground mt-1">
-                  {alert.message}
-                </p>
+                <p className="text-sm text-foreground mt-1">{alert.message}</p>
                 <p className="text-xs text-muted-foreground mt-1 font-mono">
                   {new Date(alert.created_at).toLocaleDateString(undefined, {
                     month: "short",
@@ -108,6 +124,13 @@ export default function AlertsPage() {
                   })}
                 </p>
               </div>
+              <button
+                onClick={(e) => handleDismiss(e, alert.id)}
+                disabled={dismissingId === alert.id}
+                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-danger transition-opacity shrink-0"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
             </div>
           );
 

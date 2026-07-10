@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, usePathname } from "next/navigation";
 import Link from "next/link";
 import { Bell, LogOut, User } from "lucide-react";
 import {
@@ -24,6 +24,7 @@ function getInitials(name: string, email: string | undefined) {
 
 export function Navbar() {
   const router = useRouter();
+  const pathname = usePathname();
   const [email, setEmail] = useState<string | undefined>(undefined);
   const [displayName, setDisplayName] = useState("");
   const [avatarColor, setAvatarColor] = useState(AVATAR_COLORS[0].value);
@@ -52,7 +53,7 @@ export function Navbar() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [pathname]);
 
   const handleLogout = async () => {
     await signOut();

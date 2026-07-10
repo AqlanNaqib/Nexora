@@ -625,3 +625,17 @@ def delete_entity(
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/alerts/{alert_id}")
+def delete_alert(alert_id: str, current_user=Depends(get_current_user)):
+    try:
+        if alert_id.startswith("stale-"):
+            return {"status": "dismissed", "id": alert_id}
+
+        supabase.table("alerts").delete().eq("id", alert_id).eq(
+            "user_id", current_user.id
+        ).execute()
+        return {"status": "deleted", "id": alert_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

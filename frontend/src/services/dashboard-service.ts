@@ -42,3 +42,12 @@ export async function deleteEntity(category: string, entityName: string) {
   );
   return response.data;
 }
+
+
+export async function deleteAlert(alertId: string) {
+  const headers = await getAuthHeader();
+  const response = await axios.delete(`${API_URL}/alerts/${alertId}`, {
+    headers,
+  });
+  return response.data;
+}

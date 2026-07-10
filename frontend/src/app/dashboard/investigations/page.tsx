@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { ListRowSkeleton } from "@/components/ui/list-skeleton";
 import { Plus, FolderSearch, X } from "lucide-react";
 
 interface Investigation {
@@ -25,18 +26,20 @@ export default function InvestigationsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const pageSize = 5;
+  const pageSize = 10;
 
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [creating, setCreating] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let ignore = false;
 
     async function startFetching() {
+      setLoading(true);
       try {
         const data = await fetchInvestigations(page, pageSize);
         if (!ignore) {
@@ -46,6 +49,8 @@ export default function InvestigationsPage() {
         }
       } catch (err) {
         if (!ignore) setError("Failed to load investigations");
+      } finally {
+        if (!ignore) setLoading(false);
       }
     }
 
@@ -130,7 +135,9 @@ export default function InvestigationsPage() {
       )}
 
       <div className="mt-4">
-        {investigations.length === 0 && !showForm && (
+        {loading ? (
+          <ListRowSkeleton count={pageSize} />
+        ) : investigations.length === 0 && !showForm ? (
           <div className="flex flex-col items-center justify-center py-20 border border-dashed border-border rounded-lg">
             <FolderSearch className="h-8 w-8 text-muted-foreground/50 mb-3" />
             <p className="text-foreground text-sm font-medium">
@@ -140,35 +147,35 @@ export default function InvestigationsPage() {
               Create your first case to start organizing documents
             </p>
           </div>
-        )}
-
-        {investigations.map((inv) => (
-          <Link key={inv.id} href={`/dashboard/investigations/${inv.id}`}>
-            <Card className="border-border border-x-0 border-t-0 rounded-none first:rounded-t-md last:rounded-b-md shadow-none hover:bg-surface-hover transition-colors cursor-pointer">
-              <CardContent className="py-3 px-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm font-medium text-foreground">
-                      {inv.title}
-                    </p>
-                    {inv.description && (
-                      <p className="text-xs text-muted-foreground mt-0.5">
-                        {inv.description}
+        ) : (
+          investigations.map((inv) => (
+            <Link key={inv.id} href={`/dashboard/investigations/${inv.id}`}>
+              <Card className="border-border border-x-0 border-t-0 rounded-none first:rounded-t-md last:rounded-b-md shadow-none hover:bg-surface-hover transition-colors cursor-pointer">
+                <CardContent className="py-3 px-4">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-foreground">
+                        {inv.title}
                       </p>
-                    )}
+                      {inv.description && (
+                        <p className="text-xs text-muted-foreground mt-0.5">
+                          {inv.description}
+                        </p>
+                      )}
+                    </div>
+                    <span className="text-xs text-muted-foreground font-mono">
+                      {new Date(inv.created_at).toLocaleDateString(undefined, {
+                        month: "short",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </span>
                   </div>
-                  <span className="text-xs text-muted-foreground font-mono">
-                    {new Date(inv.created_at).toLocaleDateString(undefined, {
-                      month: "short",
-                      day: "numeric",
-                      year: "numeric",
-                    })}
-                  </span>
-                </div>
-              </CardContent>
-            </Card>
-          </Link>
-        ))}
+                </CardContent>
+              </Card>
+            </Link>
+          ))
+        )}
       </div>
 
       <PaginationControls

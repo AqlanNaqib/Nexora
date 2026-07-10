@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { PaginationControls } from "@/components/ui/pagination-controls";
+import { ListRowSkeleton } from "@/components/ui/list-skeleton";
 import {
   FileText,
   Upload,
@@ -49,11 +50,12 @@ export default function DocumentsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const pageSize = 5;
+  const pageSize = 10;
 
   const [searchInput, setSearchInput] = useState("");
   const [search, setSearch] = useState("");
 
+  const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -74,6 +76,7 @@ export default function DocumentsPage() {
     let ignore = false;
 
     async function startFetching() {
+      setLoading(true);
       try {
         const data = await fetchDocuments(page, pageSize, search);
         if (!ignore) {
@@ -83,6 +86,8 @@ export default function DocumentsPage() {
         }
       } catch (err) {
         if (!ignore) setError("Failed to load documents");
+      } finally {
+        if (!ignore) setLoading(false);
       }
     }
 
@@ -207,7 +212,9 @@ export default function DocumentsPage() {
       )}
 
       <div className="mt-4">
-        {documents.length === 0 && (
+        {loading ? (
+          <ListRowSkeleton count={pageSize} />
+        ) : documents.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 border border-dashed border-border rounded-lg">
             <FileUp className="h-8 w-8 text-muted-foreground/50 mb-3" />
             <p className="text-foreground text-sm font-medium">
@@ -219,95 +226,95 @@ export default function DocumentsPage() {
                 : "Upload a document to begin analysis"}
             </p>
           </div>
-        )}
+        ) : (
+          documents.map((doc) => {
+            const isExpanded = expandedIds.has(doc.id);
+            const canExpand = doc.status === "analyzed" && doc.summary;
 
-        {documents.map((doc) => {
-          const isExpanded = expandedIds.has(doc.id);
-          const canExpand = doc.status === "analyzed" && doc.summary;
-
-          return (
-            <Card
-              key={doc.id}
-              className="border-border border-x-0 border-t-0 rounded-none first:rounded-t-md last:rounded-b-md shadow-none"
-            >
-              <CardContent className="p-0">
-                <div
-                  className={`flex items-center justify-between gap-4 px-4 py-3 ${
-                    canExpand ? "cursor-pointer hover:bg-surface-hover" : ""
-                  }`}
-                  onClick={() => canExpand && toggleExpanded(doc.id)}
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    {canExpand ? (
-                      isExpanded ? (
-                        <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+            return (
+              <Card
+                key={doc.id}
+                className="border-border border-x-0 border-t-0 rounded-none first:rounded-t-md last:rounded-b-md shadow-none"
+              >
+                <CardContent className="p-0">
+                  <div
+                    className={`flex items-center justify-between gap-4 px-4 py-3 ${
+                      canExpand ? "cursor-pointer hover:bg-surface-hover" : ""
+                    }`}
+                    onClick={() => canExpand && toggleExpanded(doc.id)}
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      {canExpand ? (
+                        isExpanded ? (
+                          <ChevronDown className="h-4 w-4 text-muted-foreground shrink-0" />
+                        ) : (
+                          <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                        )
                       ) : (
-                        <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
-                      )
-                    ) : (
-                      <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
-                    )}
-                    <div className="min-w-0">
-                      <p className="text-sm font-medium text-foreground truncate">
-                        {doc.filename}
-                      </p>
-                      <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                        {new Date(doc.created_at).toLocaleDateString(undefined, {
-                          month: "short",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </p>
+                        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">
+                          {doc.filename}
+                        </p>
+                        <p className="text-xs text-muted-foreground font-mono mt-0.5">
+                          {new Date(doc.created_at).toLocaleDateString(undefined, {
+                            month: "short",
+                            day: "numeric",
+                            year: "numeric",
+                          })}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 shrink-0">
+                      <StatusDot status={doc.status} />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={analyzingId === doc.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleAnalyze(doc.id);
+                        }}
+                      >
+                        {analyzingId === doc.id
+                          ? "Analyzing..."
+                          : doc.status === "analyzed"
+                            ? "Re-analyze"
+                            : "Analyze"}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={deletingId === doc.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(doc.id);
+                        }}
+                      >
+                        <Trash2 className="h-3.5 w-3.5 text-danger" />
+                      </Button>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-4 shrink-0">
-                    <StatusDot status={doc.status} />
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={analyzingId === doc.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleAnalyze(doc.id);
-                      }}
-                    >
-                      {analyzingId === doc.id
-                        ? "Analyzing..."
-                        : doc.status === "analyzed"
-                          ? "Re-analyze"
-                          : "Analyze"}
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      disabled={deletingId === doc.id}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleDelete(doc.id);
-                      }}
-                    >
-                      <Trash2 className="h-3.5 w-3.5 text-danger" />
-                    </Button>
-                  </div>
-                </div>
-
-                {isExpanded && doc.summary && (
-                  <div className="px-4 pb-4 pl-11">
-                    <div className="bg-surface border border-border rounded-md px-4 py-3">
-                      <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
-                        Summary
-                      </p>
-                      <p className="text-sm text-foreground/90 whitespace-pre-line leading-relaxed">
-                        {doc.summary}
-                      </p>
+                  {isExpanded && doc.summary && (
+                    <div className="px-4 pb-4 pl-11">
+                      <div className="bg-surface border border-border rounded-md px-4 py-3">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide mb-2">
+                          Summary
+                        </p>
+                        <p className="text-sm text-foreground/90 whitespace-pre-line leading-relaxed">
+                          {doc.summary}
+                        </p>
+                      </div>
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          );
-        })}
+                  )}
+                </CardContent>
+              </Card>
+            );
+          })
+        )}
       </div>
 
       <PaginationControls

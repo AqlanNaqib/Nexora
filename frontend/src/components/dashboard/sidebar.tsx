@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { Separator } from "@/components/ui/separator";
 import { cn } from "@/lib/utils";
+import { NexoraMark } from "@/components/nexora-mark";
 
 const navItems = [
   { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
@@ -30,33 +31,13 @@ export function Sidebar() {
 
   return (
     <aside className="w-64 h-full bg-sidebar border-r border-sidebar-border flex flex-col">
-      <div className="h-16 flex items-center gap-3 px-6">
-        <div className="relative shrink-0">
-          <div className="absolute inset-0 bg-primary/30 blur-md rounded-lg" />
-          <div className="relative h-8 w-8 rounded-lg bg-gradient-to-br from-primary to-primary-hover flex items-center justify-center shadow-lg shadow-primary/20">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-            >
-              <circle cx="10.5" cy="10.5" r="6.5" stroke="white" strokeWidth="2" />
-              <path
-                d="M19 19L15 15"
-                stroke="white"
-                strokeWidth="2"
-                strokeLinecap="round"
-              />
-              <circle cx="10.5" cy="10.5" r="2.5" fill="white" />
-            </svg>
-          </div>
-        </div>
+      <div className="h-16 flex items-center gap-2.5 px-6">
+        <NexoraMark className="text-primary shrink-0" />
         <div className="flex flex-col leading-none">
-          <span className="text-lg font-semibold text-sidebar-foreground tracking-tight">
-            Nexora
+          <span className="text-lg font-mono font-medium text-sidebar-foreground tracking-tight">
+            NEXORA
           </span>
-          <span className="text-[10px] text-sidebar-foreground/50 tracking-wider uppercase mt-0.5">
+          <span className="text-[10px] text-sidebar-foreground/50 tracking-wider uppercase mt-0.5 font-mono">
             Investigation Workspace
           </span>
         </div>

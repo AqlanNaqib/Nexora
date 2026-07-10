@@ -26,6 +26,9 @@ def health_check():
 
 
 
+from lib.pagination import calculate_pagination
+
+
 @app.get("/documents")
 def get_documents(
     page: int = 1,
@@ -34,8 +37,6 @@ def get_documents(
     current_user=Depends(get_current_user),
 ):
     try:
-        offset = (page - 1) * page_size
-
         query = supabase.table("documents").select("id", count="exact").eq(
             "user_id", current_user.id
         )
@@ -45,6 +46,9 @@ def get_documents(
             )
         count_response = query.execute()
         total = count_response.count
+
+        pagination = calculate_pagination(page, page_size, total)
+        offset = pagination["offset"]
 
         data_query = (
             supabase.table("documents")
@@ -66,7 +70,7 @@ def get_documents(
             "total": total,
             "page": page,
             "page_size": page_size,
-            "total_pages": (total + page_size - 1) // page_size,
+            "total_pages": pagination["total_pages"],
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -213,8 +217,6 @@ def get_investigations(
     current_user=Depends(get_current_user),
 ):
     try:
-        offset = (page - 1) * page_size
-
         count_response = (
             supabase.table("investigations")
             .select("id", count="exact")
@@ -222,6 +224,9 @@ def get_investigations(
             .execute()
         )
         total = count_response.count
+
+        pagination = calculate_pagination(page, page_size, total)
+        offset = pagination["offset"]
 
         response = (
             supabase.table("investigations")
@@ -237,7 +242,7 @@ def get_investigations(
             "total": total,
             "page": page,
             "page_size": page_size,
-            "total_pages": (total + page_size - 1) // page_size,
+            "total_pages": pagination["total_pages"],
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

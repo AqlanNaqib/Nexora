@@ -125,8 +125,13 @@ export default function InvestigationDetailPage() {
       setInvestigation((prev) =>
         prev ? { ...prev, synthesis: updated.synthesis } : prev,
       );
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || "Synthesis failed");
+    } catch (err: unknown) {
+        let detail: string | undefined;
+        if (typeof err === "object" && err !== null) {
+          const e = err as { response?: { data?: { detail?: string } }; message?: string };
+          detail = e.response?.data?.detail ?? e.message;
+        }
+        setError(detail || "Synthesis failed");
     } finally {
       setSynthesizing(false);
     }

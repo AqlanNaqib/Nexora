@@ -27,9 +27,12 @@ export async function uploadDocument(file: File, investigationId?: string) {
   return response.data;
 }
 
-export async function fetchDocuments() {
+export async function fetchDocuments(page: number = 1, pageSize: number = 10) {
   const headers = await getAuthHeader();
-  const response = await axios.get(`${API_URL}/documents`, { headers });
+  const response = await axios.get(
+    `${API_URL}/documents?page=${page}&page_size=${pageSize}`,
+    { headers }
+  );
   return response.data;
 }
 

@@ -9,6 +9,7 @@ import {
 } from "@/services/documents-service";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import {
   FileText,
   Upload,
@@ -43,6 +44,11 @@ function StatusDot({ status }: { status: string }) {
 
 export default function DocumentsPage() {
   const [documents, setDocuments] = useState<Document[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const pageSize = 3;
+
   const [uploading, setUploading] = useState(false);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -54,8 +60,12 @@ export default function DocumentsPage() {
 
     async function startFetching() {
       try {
-        const data = await fetchDocuments();
-        if (!ignore) setDocuments(data);
+        const data = await fetchDocuments(page, pageSize);
+        if (!ignore) {
+          setDocuments(data.documents);
+          setTotalPages(data.total_pages);
+          setTotal(data.total);
+        }
       } catch (err) {
         if (!ignore) setError("Failed to load documents");
       }
@@ -66,7 +76,14 @@ export default function DocumentsPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [page]);
+
+  const refetchCurrentPage = async () => {
+    const data = await fetchDocuments(page, pageSize);
+    setDocuments(data.documents);
+    setTotalPages(data.total_pages);
+    setTotal(data.total);
+  };
 
   const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -76,8 +93,8 @@ export default function DocumentsPage() {
     setError(null);
     try {
       await uploadDocument(file);
-      const data = await fetchDocuments();
-      setDocuments(data);
+      setPage(1);
+      await refetchCurrentPage();
     } catch (err) {
       setError("Upload failed");
     } finally {
@@ -91,7 +108,7 @@ export default function DocumentsPage() {
     try {
       const updated = await analyzeDocument(documentId);
       setDocuments((prev) =>
-        prev.map((doc) => (doc.id === documentId ? updated : doc)),
+        prev.map((doc) => (doc.id === documentId ? updated : doc))
       );
       setExpandedIds((prev) => new Set(prev).add(documentId));
     } catch (err) {
@@ -108,7 +125,7 @@ export default function DocumentsPage() {
     setError(null);
     try {
       await deleteDocument(documentId);
-      setDocuments((prev) => prev.filter((doc) => doc.id !== documentId));
+      await refetchCurrentPage();
     } catch (err) {
       setError("Delete failed");
     } finally {
@@ -136,8 +153,8 @@ export default function DocumentsPage() {
         <div>
           <h1 className="text-xl font-semibold text-foreground">Documents</h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {documents.length} document{documents.length !== 1 && "s"}
-            {documents.length > 0 && ` · ${analyzedCount} analyzed`}
+            {total} document{total !== 1 && "s"}
+            {total > 0 && ` · ${analyzedCount} analyzed on this page`}
           </p>
         </div>
 
@@ -208,14 +225,11 @@ export default function DocumentsPage() {
                         {doc.filename}
                       </p>
                       <p className="text-xs text-muted-foreground font-mono mt-0.5">
-                        {new Date(doc.created_at).toLocaleDateString(
-                          undefined,
-                          {
-                            month: "short",
-                            day: "numeric",
-                            year: "numeric",
-                          },
-                        )}
+                        {new Date(doc.created_at).toLocaleDateString(undefined, {
+                          month: "short",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
                       </p>
                     </div>
                   </div>
@@ -268,6 +282,14 @@ export default function DocumentsPage() {
           );
         })}
       </div>
+
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        pageSize={pageSize}
+        onPageChange={setPage}
+      />
     </div>
   );
 }

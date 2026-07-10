@@ -9,6 +9,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
+import { PaginationControls } from "@/components/ui/pagination-controls";
 import { Plus, FolderSearch, X } from "lucide-react";
 
 interface Investigation {
@@ -21,6 +22,11 @@ interface Investigation {
 
 export default function InvestigationsPage() {
   const [investigations, setInvestigations] = useState<Investigation[]>([]);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [total, setTotal] = useState(0);
+  const pageSize = 5;
+
   const [showForm, setShowForm] = useState(false);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -32,8 +38,12 @@ export default function InvestigationsPage() {
 
     async function startFetching() {
       try {
-        const data = await fetchInvestigations();
-        if (!ignore) setInvestigations(data);
+        const data = await fetchInvestigations(page, pageSize);
+        if (!ignore) {
+          setInvestigations(data.investigations);
+          setTotalPages(data.total_pages);
+          setTotal(data.total);
+        }
       } catch (err) {
         if (!ignore) setError("Failed to load investigations");
       }
@@ -44,7 +54,7 @@ export default function InvestigationsPage() {
     return () => {
       ignore = true;
     };
-  }, []);
+  }, [page]);
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,14 +63,15 @@ export default function InvestigationsPage() {
     setCreating(true);
     setError(null);
     try {
-      const newInvestigation = await createInvestigation(
-        title,
-        description || undefined
-      );
-      setInvestigations((prev) => [newInvestigation, ...prev]);
+      await createInvestigation(title, description || undefined);
       setTitle("");
       setDescription("");
       setShowForm(false);
+      setPage(1);
+      const data = await fetchInvestigations(1, pageSize);
+      setInvestigations(data.investigations);
+      setTotalPages(data.total_pages);
+      setTotal(data.total);
     } catch (err) {
       setError("Failed to create investigation");
     } finally {
@@ -76,8 +87,7 @@ export default function InvestigationsPage() {
             Investigations
           </h1>
           <p className="text-sm text-muted-foreground mt-1">
-            {investigations.length} case
-            {investigations.length !== 1 && "s"}
+            {total} case{total !== 1 && "s"}
           </p>
         </div>
 
@@ -160,6 +170,14 @@ export default function InvestigationsPage() {
           </Link>
         ))}
       </div>
+
+      <PaginationControls
+        page={page}
+        totalPages={totalPages}
+        total={total}
+        pageSize={pageSize}
+        onPageChange={setPage}
+      />
     </div>
   );
 }

@@ -19,9 +19,12 @@ export async function createInvestigation(title: string, description?: string) {
   return response.data;
 }
 
-export async function fetchInvestigations() {
+export async function fetchInvestigations(page: number = 1, pageSize: number = 10) {
   const headers = await getAuthHeader();
-  const response = await axios.get(`${API_URL}/investigations`, { headers });
+  const response = await axios.get(
+    `${API_URL}/investigations?page=${page}&page_size=${pageSize}`,
+    { headers }
+  );
   return response.data;
 }
 
@@ -40,7 +43,6 @@ export async function deleteInvestigation(id: string) {
   });
   return response.data;
 }
-
 
 export async function synthesizeInvestigation(id: string) {
   const headers = await getAuthHeader();

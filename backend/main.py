@@ -27,15 +27,38 @@ def health_check():
 
 
 @app.get("/documents")
-def get_documents(current_user=Depends(get_current_user)):
+def get_documents(
+    page: int = 1,
+    page_size: int = 10,
+    current_user=Depends(get_current_user),
+):
     try:
+        offset = (page - 1) * page_size
+
+        count_response = (
+            supabase.table("documents")
+            .select("id", count="exact")
+            .eq("user_id", current_user.id)
+            .execute()
+        )
+        total = count_response.count
+
         response = (
             supabase.table("documents")
             .select("*")
             .eq("user_id", current_user.id)
+            .order("created_at", desc=True)
+            .range(offset, offset + page_size - 1)
             .execute()
         )
-        return response.data
+
+        return {
+            "documents": response.data,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -175,16 +198,38 @@ def create_investigation(
 
 
 @app.get("/investigations")
-def get_investigations(current_user=Depends(get_current_user)):
+def get_investigations(
+    page: int = 1,
+    page_size: int = 10,
+    current_user=Depends(get_current_user),
+):
     try:
+        offset = (page - 1) * page_size
+
+        count_response = (
+            supabase.table("investigations")
+            .select("id", count="exact")
+            .eq("user_id", current_user.id)
+            .execute()
+        )
+        total = count_response.count
+
         response = (
             supabase.table("investigations")
             .select("*")
             .eq("user_id", current_user.id)
             .order("created_at", desc=True)
+            .range(offset, offset + page_size - 1)
             .execute()
         )
-        return response.data
+
+        return {
+            "investigations": response.data,
+            "total": total,
+            "page": page,
+            "page_size": page_size,
+            "total_pages": (total + page_size - 1) // page_size,
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

@@ -8,6 +8,7 @@ import {
   deleteDocument,
 } from "@/services/documents-service";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent } from "@/components/ui/card";
 import { PaginationControls } from "@/components/ui/pagination-controls";
 import {
@@ -17,6 +18,7 @@ import {
   ChevronRight,
   FileUp,
   Trash2,
+  Search,
 } from "lucide-react";
 
 interface Document {
@@ -47,7 +49,10 @@ export default function DocumentsPage() {
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
   const [total, setTotal] = useState(0);
-  const pageSize = 3;
+  const pageSize = 5;
+
+  const [searchInput, setSearchInput] = useState("");
+  const [search, setSearch] = useState("");
 
   const [uploading, setUploading] = useState(false);
   const [analyzingId, setAnalyzingId] = useState<string | null>(null);
@@ -55,12 +60,22 @@ export default function DocumentsPage() {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
+  // Debounce: wait 400ms after the user stops typing before updating `search`
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setSearch(searchInput);
+      setPage(1);
+    }, 400);
+
+    return () => clearTimeout(timeout);
+  }, [searchInput]);
+
   useEffect(() => {
     let ignore = false;
 
     async function startFetching() {
       try {
-        const data = await fetchDocuments(page, pageSize);
+        const data = await fetchDocuments(page, pageSize, search);
         if (!ignore) {
           setDocuments(data.documents);
           setTotalPages(data.total_pages);
@@ -76,10 +91,10 @@ export default function DocumentsPage() {
     return () => {
       ignore = true;
     };
-  }, [page]);
+  }, [page, search]);
 
   const refetchCurrentPage = async () => {
-    const data = await fetchDocuments(page, pageSize);
+    const data = await fetchDocuments(page, pageSize, search);
     setDocuments(data.documents);
     setTotalPages(data.total_pages);
     setTotal(data.total);
@@ -175,6 +190,16 @@ export default function DocumentsPage() {
         />
       </div>
 
+      <div className="relative mt-4">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
+        <Input
+          placeholder="Search by filename or summary..."
+          value={searchInput}
+          onChange={(e) => setSearchInput(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       {error && (
         <p className="text-sm text-danger mt-4 border border-danger/20 rounded-md px-3 py-2">
           {error}
@@ -186,10 +211,12 @@ export default function DocumentsPage() {
           <div className="flex flex-col items-center justify-center py-20 border border-dashed border-border rounded-lg">
             <FileUp className="h-8 w-8 text-muted-foreground/50 mb-3" />
             <p className="text-foreground text-sm font-medium">
-              No documents yet
+              {search ? "No documents match your search" : "No documents yet"}
             </p>
             <p className="text-xs text-muted-foreground mt-1">
-              Upload a document to begin analysis
+              {search
+                ? "Try a different search term"
+                : "Upload a document to begin analysis"}
             </p>
           </div>
         )}

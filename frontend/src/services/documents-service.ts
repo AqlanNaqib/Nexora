@@ -27,12 +27,21 @@ export async function uploadDocument(file: File, investigationId?: string) {
   return response.data;
 }
 
-export async function fetchDocuments(page: number = 1, pageSize: number = 10) {
+export async function fetchDocuments(
+  page: number = 1,
+  pageSize: number = 10,
+  search: string = ""
+) {
   const headers = await getAuthHeader();
-  const response = await axios.get(
-    `${API_URL}/documents?page=${page}&page_size=${pageSize}`,
-    { headers }
-  );
+  const params = new URLSearchParams({
+    page: String(page),
+    page_size: String(pageSize),
+  });
+  if (search) params.append("search", search);
+
+  const response = await axios.get(`${API_URL}/documents?${params}`, {
+    headers,
+  });
   return response.data;
 }
 

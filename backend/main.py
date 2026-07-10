@@ -30,24 +30,33 @@ def health_check():
 def get_documents(
     page: int = 1,
     page_size: int = 10,
+    search: str | None = None,
     current_user=Depends(get_current_user),
 ):
     try:
         offset = (page - 1) * page_size
 
-        count_response = (
-            supabase.table("documents")
-            .select("id", count="exact")
-            .eq("user_id", current_user.id)
-            .execute()
+        query = supabase.table("documents").select("id", count="exact").eq(
+            "user_id", current_user.id
         )
+        if search:
+            query = query.or_(
+                f"filename.ilike.%{search}%,summary.ilike.%{search}%"
+            )
+        count_response = query.execute()
         total = count_response.count
 
-        response = (
+        data_query = (
             supabase.table("documents")
             .select("*")
             .eq("user_id", current_user.id)
-            .order("created_at", desc=True)
+        )
+        if search:
+            data_query = data_query.or_(
+                f"filename.ilike.%{search}%,summary.ilike.%{search}%"
+            )
+        response = (
+            data_query.order("created_at", desc=True)
             .range(offset, offset + page_size - 1)
             .execute()
         )

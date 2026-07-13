@@ -1,6 +1,10 @@
-from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends
+import logging
+
+from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, Query
 from lib.supabase_client import supabase
 from dependencies import get_current_user
+
+logger = logging.getLogger("nexora")
 
 app = FastAPI()
 
@@ -31,8 +35,8 @@ from lib.pagination import calculate_pagination
 
 @app.get("/documents")
 def get_documents(
-    page: int = 1,
-    page_size: int = 10,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
     search: str | None = None,
     current_user=Depends(get_current_user),
 ):
@@ -72,8 +76,9 @@ def get_documents(
             "page_size": page_size,
             "total_pages": pagination["total_pages"],
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to fetch documents for user %s", current_user.id)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 from lib.gemini_client import gemini_client
@@ -95,6 +100,12 @@ def call_gemini_with_retry(prompt, max_retries=3):
                 time.sleep(2 ** attempt)
                 continue
             raise
+
+
+def parse_gemini_json(result):
+    raw_response = result.text.strip()
+    raw_response = raw_response.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
+    return json.loads(raw_response)
 
 
 @app.post("/documents/{document_id}/analyze")
@@ -136,11 +147,7 @@ Document:
 """
 
         result = call_gemini_with_retry(prompt)
-
-        raw_response = result.text.strip()
-        raw_response = raw_response.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-
-        parsed = json.loads(raw_response)
+        parsed = parse_gemini_json(result)
         summary = parsed["summary"]
         entities = parsed["entities"]
 
@@ -148,6 +155,7 @@ Document:
             supabase.table("documents")
             .update({"summary": summary, "entities": entities, "status": "analyzed"})
             .eq("id", document_id)
+            .eq("user_id", current_user.id)
             .execute()
         )
 
@@ -160,8 +168,9 @@ Document:
             status_code=500,
             detail="AI response could not be parsed as valid JSON",
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to analyze document %s", document_id)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 @app.delete("/documents/{document_id}")
 def delete_document(document_id: str, current_user=Depends(get_current_user)):
@@ -181,14 +190,17 @@ def delete_document(document_id: str, current_user=Depends(get_current_user)):
 
         supabase.storage.from_("documents").remove([document["storage_path"]])
 
-        supabase.table("documents").delete().eq("id", document_id).execute()
+        supabase.table("documents").delete().eq("id", document_id).eq(
+            "user_id", current_user.id
+        ).execute()
 
         return {"status": "deleted", "id": document_id}
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to delete document %s", document_id)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 from models import DocumentCreate, InvestigationCreate
@@ -206,14 +218,15 @@ def create_investigation(
             "description": investigation.description,
         }).execute()
         return response.data[0]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to create investigation for user %s", current_user.id)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/investigations")
 def get_investigations(
-    page: int = 1,
-    page_size: int = 10,
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=10, ge=1, le=100),
     current_user=Depends(get_current_user),
 ):
     try:
@@ -244,8 +257,9 @@ def get_investigations(
             "page_size": page_size,
             "total_pages": pagination["total_pages"],
         }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to fetch investigations for user %s", current_user.id)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/investigations/{investigation_id}")
@@ -266,6 +280,7 @@ def get_investigation(investigation_id: str, current_user=Depends(get_current_us
             supabase.table("documents")
             .select("*")
             .eq("investigation_id", investigation_id)
+            .eq("user_id", current_user.id)
             .execute()
         )
 
@@ -275,8 +290,9 @@ def get_investigation(investigation_id: str, current_user=Depends(get_current_us
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to fetch investigation %s", investigation_id)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.delete("/investigations/{investigation_id}")
@@ -293,23 +309,45 @@ def delete_investigation(investigation_id: str, current_user=Depends(get_current
         if not inv_response.data:
             raise HTTPException(status_code=404, detail="Investigation not found")
 
-        supabase.table("investigations").delete().eq("id", investigation_id).execute()
+        supabase.table("investigations").delete().eq("id", investigation_id).eq(
+            "user_id", current_user.id
+        ).execute()
 
         return {"status": "deleted", "id": investigation_id}
 
     except HTTPException:
         raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
+    except Exception:
+        logger.exception("Failed to delete investigation %s", investigation_id)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
+
+ALLOWED_UPLOAD_CONTENT_TYPES = {"application/pdf"}
+
+
 @app.post("/documents/upload")
 async def upload_document(
     file: UploadFile = File(...),
     investigation_id: str | None = Form(None),
     current_user=Depends(get_current_user),
 ):
+    if file.content_type not in ALLOWED_UPLOAD_CONTENT_TYPES:
+        raise HTTPException(status_code=400, detail="Only PDF files are supported")
+
     try:
         user_id = current_user.id
+
+        if investigation_id:
+            inv_response = (
+                supabase.table("investigations")
+                .select("id")
+                .eq("id", investigation_id)
+                .eq("user_id", user_id)
+                .execute()
+            )
+            if not inv_response.data:
+                raise HTTPException(status_code=404, detail="Investigation not found")
+
         file_bytes = await file.read()
         storage_path = f"{user_id}/{file.filename}"
 
@@ -332,8 +370,11 @@ async def upload_document(
         response = supabase.table("documents").insert(insert_data).execute()
 
         return response.data[0]
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception:
+        logger.exception("Failed to upload document for user %s", current_user.id)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.post("/investigations/{investigation_id}/synthesize")
@@ -356,6 +397,7 @@ def synthesize_investigation(
             supabase.table("documents")
             .select("*")
             .eq("investigation_id", investigation_id)
+            .eq("user_id", current_user.id)
             .eq("status", "analyzed")
             .execute()
         )
@@ -389,10 +431,7 @@ Document summaries:
 """
 
         result = call_gemini_with_retry(prompt)
-
-        raw_response = result.text.strip()
-        raw_response = raw_response.removeprefix("```json").removeprefix("```").removesuffix("```").strip()
-        parsed = json.loads(raw_response)
+        parsed = parse_gemini_json(result)
 
         synthesis = (
             f"**Overview**\n{parsed['overview']}\n\n"
@@ -404,10 +443,13 @@ Document summaries:
             supabase.table("investigations")
             .update({"synthesis": synthesis})
             .eq("id", investigation_id)
+            .eq("user_id", current_user.id)
             .execute()
         )
 
-        supabase.table("alerts").delete().eq("investigation_id", investigation_id).eq("type", "contradiction").execute()
+        supabase.table("alerts").delete().eq("investigation_id", investigation_id).eq(
+            "user_id", current_user.id
+        ).eq("type", "contradiction").execute()
 
         for contradiction in parsed.get("contradictions", []):
             supabase.table("alerts").insert({
@@ -425,9 +467,10 @@ Document summaries:
         raise HTTPException(
             status_code=500, detail="AI response could not be parsed as valid JSON"
         )
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
+    except Exception:
+        logger.exception("Failed to synthesize investigation %s", investigation_id)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 
 from datetime import datetime, timedelta, timezone
 
@@ -490,9 +533,10 @@ def get_dashboard_summary(current_user=Depends(get_current_user)):
             "recent_investigations": recent_investigations,
         }
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-    
+    except Exception:
+        logger.exception("Failed to build dashboard summary for user %s", current_user.id)
+        raise HTTPException(status_code=500, detail="Internal server error")
+
 
 @app.get("/entities/summary")
 def get_entities_summary(current_user=Depends(get_current_user)):
@@ -538,8 +582,9 @@ def get_entities_summary(current_user=Depends(get_current_user)):
 
         return result
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to build entities summary for user %s", current_user.id)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.get("/alerts")
@@ -580,8 +625,9 @@ def get_alerts(current_user=Depends(get_current_user)):
 
         return all_alerts
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to fetch alerts for user %s", current_user.id)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.post("/documents/reset-analysis")
@@ -595,8 +641,9 @@ def reset_all_analysis(current_user=Depends(get_current_user)):
             .execute()
         )
         return {"reset_count": len(response.data)}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to reset analysis for user %s", current_user.id)
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 VALID_ENTITY_CATEGORIES = {"people", "organizations", "dates", "locations"}
@@ -632,13 +679,19 @@ def delete_entity(
                 ]
                 supabase.table("documents").update({"entities": entities}).eq(
                     "id", doc["id"]
-                ).execute()
+                ).eq("user_id", current_user.id).execute()
                 removed_from += 1
 
         return {"removed_from": removed_from}
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception(
+            "Failed to delete entity %s/%s for user %s",
+            category,
+            entity_name,
+            current_user.id,
+        )
+        raise HTTPException(status_code=500, detail="Internal server error")
 
 
 @app.delete("/alerts/{alert_id}")
@@ -651,5 +704,6 @@ def delete_alert(alert_id: str, current_user=Depends(get_current_user)):
             "user_id", current_user.id
         ).execute()
         return {"status": "deleted", "id": alert_id}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    except Exception:
+        logger.exception("Failed to delete alert %s", alert_id)
+        raise HTTPException(status_code=500, detail="Internal server error")
